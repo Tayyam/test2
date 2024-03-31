@@ -133,27 +133,136 @@ function selectCell(cell) {
     var date = cell.getAttribute('data-date');
     var id = cell.getAttribute('data-id');
     var location = document.getElementById('hotelLocation').value;
-    var roomCount = getRoomCountByLocation(location); // Assuming this function returns the room count
+    var roomCount = location === 'shiftingMakkah' ? document.getElementById('shiftingMakkahRoomCount').value : document.getElementById('roomCount').value;
 
     if (!location) {
         alert('Please select a location first.');
         return;
     }
 
-    var key = `${id}-${date}`;
+    var key = id + '-' + date;
     if (selectedDates[key]) {
-        // Deselect this cell and any subsequent selected cells in the row
-        deselectCellsStartingFrom(cell);
+        // If cell is already selected, deselect it
+        delete selectedDates[key];
+        cell.style.backgroundColor = ''; // Reset cell color
+        cell.textContent = "-"; // Reset cell text
     } else {
-        // Select this cell. If it's between two selected cells, also select all in-between cells
-        selectCellAndInRange(cell, roomCount, location);
+        selectedDates[key] = { location: location, roomCount: roomCount };
+        cell.style.backgroundColor = getLocationColor(location);
+        cell.textContent = roomCount; // Display the number of rooms
+
+        // After marking the clicked cell, check and apply selection for in-between cells
+        selectCellAndInRange(cell, id, roomCount, location);
     }
 
-    updateCellDisplay(); // Reflect selection changes in UI
+    updateCellDisplay();
+}
+
+function selectCellAndInRange(clickedCell, rowId, roomCount, location) {
+    let rowCells = Array.from(clickedCell.parentNode.querySelectorAll('td[data-date]'));
+    let clickedIndex = rowCells.indexOf(clickedCell);
+    let firstSelectedIndex = null;
+    let lastSelectedIndex = null;
+
+    // Identify the first and last selected indexes in the same row
+    rowCells.forEach((cell, index) => {
+        if (selectedDates[rowId + '-' + cell.getAttribute('data-date')]) {
+            if (firstSelectedIndex === null) firstSelectedIndex = index;
+            lastSelectedIndex = index; // Keep updating to the last found
+        }
+    });
+
+    // If there's a range to select (i.e., both first and last selections are made)
+    if (firstSelectedIndex !== null && lastSelectedIndex !== null && firstSelectedIndex !== lastSelectedIndex) {
+        for (let i = firstSelectedIndex; i <= lastSelectedIndex; i++) {
+            let cell = rowCells[i];
+            let key = rowId + '-' + cell.getAttribute('data-date');
+            if (!selectedDates[key]) { // Select only if not already selected
+                selectedDates[key] = { location: location, roomCount: roomCount };
+                cell.style.backgroundColor = getLocationColor(location);
+                cell.textContent = roomCount;
+            }
+        }
+    }
 }
 
 
+
+
 // Helper functions for the new logic
+
+function getLocationColor(location) {
+    switch(location) {
+        case 'mainMakkah': return '#ffcccc';
+        case 'shiftingMakkah': return '#ccccff';
+        case 'madinah': return '#ccffcc';
+        default: return '';
+    }
+}
+
+function handleDeselection(cell, id, date) {
+    // Identify contiguous selection range that includes the cell to be deselected
+    var contiguousRange = findContiguousRange(cell, id);
+    // Remove all cells in the identified range from selectedDates
+    contiguousRange.forEach(cellDate => {
+        var key = id + '-' + cellDate;
+        delete selectedDates[key];
+    });
+    // Update the UI to reflect the changes
+    updateCellDisplay();
+}
+
+function findContiguousRange(cell, id) {
+    var cellDate = cell.getAttribute('data-date');
+    var cellIndex = Array.from(cell.parentNode.cells).indexOf(cell);
+    var dates = [];
+
+    // Look backwards to find the start of the contiguous range
+    for (let i = cellIndex; i >= 0; i--) {
+        var currentCell = cell.parentNode.cells[i];
+        var currentDate = currentCell.getAttribute('data-date');
+        var key = id + '-' + currentDate;
+        if (selectedDates[key]) {
+            dates.push(currentDate);
+        } else {
+            break; // Stop if we hit a cell that's not part of the contiguous range
+        }
+    }
+
+    // Look forwards to find the end of the contiguous range
+    for (let i = cellIndex + 1; i < cell.parentNode.cells.length; i++) {
+        var currentCell = cell.parentNode.cells[i];
+        var currentDate = currentCell.getAttribute('data-date');
+        var key = id + '-' + currentDate;
+        if (selectedDates[key]) {
+            dates.push(currentDate);
+        } else {
+            break; // Stop if we hit a cell that's not part of the contiguous range
+        }
+    }
+
+    return dates;
+}
+
+function updateCellDisplay() {
+    // Retrieve all cells in the booking table that have a date attribute
+    var cells = document.querySelectorAll('#bookingTable td[data-date]');
+    cells.forEach(cell => {
+        var id = cell.getAttribute('data-id');
+        var date = cell.getAttribute('data-date');
+        var key = id + '-' + date;
+        
+        if (selectedDates[key]) {
+            // If the cell is selected, display the number of rooms and apply the background color
+            cell.textContent = selectedDates[key].roomCount;
+            cell.style.backgroundColor = getLocationColor(selectedDates[key].location);
+        } else {
+            // If the cell is not selected, reset its display
+            cell.textContent = '-';
+            cell.style.backgroundColor = ''; // Reset the background color
+        }
+    });
+}
 function getRoomCountByLocation(location) {
     // You can expand this logic based on your application's needs
     switch(location) {
@@ -179,48 +288,36 @@ function deselectCellsStartingFrom(cell) {
     }
 }
 
-function selectCellAndInRange(cell, roomCount, location) {
-    let rowCells = Array.from(cell.parentNode.querySelectorAll('td[data-date]'));
-    let cellIndex = rowCells.indexOf(cell);
-    let startRange = cellIndex;
-    let endRange = cellIndex;
 
-    // Find the start and end range for selection based on existing selections in the row
-    for (let i = cellIndex - 1; i >= 0; i--) {
-        if (!rowCells[i].classList.contains(location) && rowCells[i].textContent !== "-") break;
-        startRange = i;
-    }
 
-    for (let i = cellIndex + 1; i < rowCells.length; i++) {
-        if (!rowCells[i].classList.contains(location) && rowCells[i].textContent !== "-") break;
-        endRange = i;
-    }
 
-    // Select cells within the range
-    for (let i = startRange; i <= endRange; i++) {
-        let key = `${rowCells[i].getAttribute('data-id')}-${rowCells[i].getAttribute('data-date')}`;
-        selectedDates[key] = location;
-        rowCells[i].textContent = roomCount; // Display the room count
-        colorCellBasedOnLocation(rowCells[i], location); // Color the cell based on location
-    }
-}
-
-function colorCellBasedOnLocation(cell, location) {
-    // Apply color coding based on location
-    switch(location) {
-        case "mainMakkah": cell.style.backgroundColor = "#ffcccc"; break;
-        case "shiftingMakkah": cell.style.backgroundColor = "#ccccff"; break;
-        case "madinah": cell.style.backgroundColor = "#ccffcc"; break;
-        default: cell.style.backgroundColor = ""; // No location selected
-    }
-}
-    
-    
-    // Function to calculate and generate the summary table
+        // Function to calculate and generate the summary table
     function calculate() {
-        clearSummaryRows();
-        generateSummary();
+    var roomType = document.getElementById('roomType').value;
+    var roomCount = parseInt(document.getElementById('roomCount').value, 10);
+    var totalPilgrims = calculatePilgrims(roomType, roomCount);
+
+    // Calculation for Shifting Makkah
+    adjustShiftingMakkahRoomCount(totalPilgrims);
+
+    // Proceed with summary generation and display update
+    clearSummaryRows();
+    var groupedData = groupSelectedDatesByLineAndLocation();
+    displayGroupedData(groupedData);
+}
+function adjustShiftingMakkahRoomCount(totalPilgrims) {
+    var shiftingMakkahRoomTypeSelected = document.getElementById('shiftingMakkahRoomType').value;
+    var shiftingCapacity = { double: 2, triple: 3, quadruple: 4 }[shiftingMakkahRoomTypeSelected];
+    var shiftingMakkahRoomCount = totalPilgrims / shiftingCapacity;
+
+    if (Math.ceil(shiftingMakkahRoomCount) * shiftingCapacity !== totalPilgrims) {
+        alert(`Shifting Makkah room type ${shiftingMakkahRoomTypeSelected} cannot accommodate all pilgrims equally without affecting the total number of pilgrims. Adjusting room count or room type is required.`);
+        // Here, you might choose not to revert but perhaps adjust the count directly or prompt for manual adjustment
+        document.getElementById('shiftingMakkahRoomCount').value = Math.ceil(shiftingMakkahRoomCount); // Suggestion for adjustment
+    } else {
+        document.getElementById('shiftingMakkahRoomCount').value = Math.ceil(shiftingMakkahRoomCount); // Update the input field if calculation is valid
     }
+}
     
     function clearSummaryRows() {
         var summaryTable = document.getElementById('summaryTable');
@@ -237,33 +334,27 @@ function colorCellBasedOnLocation(cell, location) {
 }
 
 function groupSelectedDatesByLineAndLocation() {
-    // Initialize an object to hold the grouped data
     let groupedData = {};
 
-    // Iterate over each selected date
-    Object.entries(selectedDates).forEach(([key, location]) => {
+    Object.entries(selectedDates).forEach(([key, value]) => {
         const [id, date] = key.split('-');
-        const dateObj = new Date(date.split('/')[1] + '/' + date.split('/')[0] + '/2024'); // Convert date to Date object
-        
+        const location = value.location; // Now correctly extracting location from the value object
+        const dateObj = new Date(date.split('/')[1] + '/' + date.split('/')[0] + '/2024');
+
         if (!groupedData[`${id}-${location}`]) {
             groupedData[`${id}-${location}`] = [];
         }
-
         groupedData[`${id}-${location}`].push(dateObj);
     });
 
-    // Sort dates within each group and find contiguous ranges
     Object.keys(groupedData).forEach(group => {
         groupedData[group].sort((a, b) => a - b);
-
-        // Reduce the sorted dates into contiguous ranges
         const ranges = groupedData[group].reduce((acc, current, index, array) => {
             if (index === 0) {
                 acc.push({ start: current, end: current });
             } else {
                 let lastRange = acc[acc.length - 1];
                 let difference = (current - lastRange.end) / (1000 * 60 * 60 * 24);
-
                 if (difference === 1) {
                     lastRange.end = current;
                 } else {
@@ -273,18 +364,17 @@ function groupSelectedDatesByLineAndLocation() {
             return acc;
         }, []);
 
-        // Convert ranges back to 'DD/MM' format and update groupedData
         groupedData[group] = ranges.map(range => ({
             start: formatDate(range.start),
             end: formatDate(range.end),
-            roomCount: document.getElementById('roomCount').value, // Assuming a global room count for simplicity
-            roomType: document.getElementById('roomType').value // Assuming a global room type for simplicity
+            // roomCount and roomType now need to be extracted in a different way
+            roomCount: document.getElementById('roomCount').value, // This needs adjustment
+            roomType: document.getElementById('roomType').value, // This needs adjustment
         }));
     });
 
     return groupedData;
 }
-
 
 function displayGroupedData(groupedData) {
     var summaryTable = document.getElementById('summaryTable');
@@ -293,13 +383,13 @@ function displayGroupedData(groupedData) {
 
         ranges.forEach(range => {
             let row = summaryTable.insertRow();
-            row.insertCell(0).textContent = id; // Room-line ID
-            row.insertCell(1).textContent = location; // Area
-            row.insertCell(2).textContent = range.start; // From date
-            row.insertCell(3).textContent = range.end; // To date
-            row.insertCell(4).textContent = range.roomCount; // Room count
-            row.insertCell(5).textContent = range.roomType; // Room type
-            row.insertCell(6).textContent = calculatePilgrims(range.roomType, range.roomCount); // Pilgrims
+            row.insertCell(0).textContent = id;
+            row.insertCell(1).textContent = location;
+            row.insertCell(2).textContent = range.start;
+            row.insertCell(3).textContent = range.end;
+            row.insertCell(4).textContent = range.roomCount; // This needs correct data
+            row.insertCell(5).textContent = range.roomType; // This needs correct data
+            row.insertCell(6).textContent = calculatePilgrims(range.roomType, range.roomCount);
         });
     });
 }
