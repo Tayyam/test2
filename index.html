@@ -125,13 +125,32 @@ function updateCellDisplay() {
         var key = id + '-' + date;
         if (selectedDates[key]) {
             cell.style.backgroundColor = getLocationColor(selectedDates[key].location);
-            cell.textContent = roomSettings[id].roomCount; // Use room count from roomSettings
+            // If the location is Shifting Makkah, display its room count. Otherwise, display the main room count.
+            cell.textContent = (selectedDates[key].location === 'shiftingMakkah') ?
+                document.getElementById('shiftingMakkahRoomCount').value :
+                document.getElementById('roomCount').value;
         } else {
             cell.textContent = '-';
             cell.style.backgroundColor = ''; // Reset the background color
         }
     });
 }
+// Setup Mutation Observer for input fields
+const config = { attributes: true, childList: false, subtree: false, attributeFilter: ['value'] };
+
+const callback = function(mutationsList, observer) {
+    for(const mutation of mutationsList) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+            updateCellDisplay(); // Call updateCellDisplay whenever an input value changes
+        }
+    }
+};
+
+const observer = new MutationObserver(callback);
+
+// Start observing the 'value' attribute for both room count inputs
+observer.observe(document.getElementById('roomCount'), config);
+observer.observe(document.getElementById('shiftingMakkahRoomCount'), config);
     
 function selectCell(cell) {
     var id = cell.getAttribute('data-id');
@@ -144,22 +163,24 @@ function selectCell(cell) {
 
     var key = `${id}-${date}`;
     if (!selectedDates[key]) {
-        // Handling selection
         selectedDates[key] = { location, date };
         cell.style.backgroundColor = getLocationColor(location);
         var rangeSelected = selectCellAndInRange(cell, id, location);
         if (!rangeSelected) {
-            cell.textContent = getRoomCountByLocation(location);
+            // Display room count immediately upon selection based on the location
+            cell.textContent = (location === 'shiftingMakkah') ?
+                document.getElementById('shiftingMakkahRoomCount').value :
+                document.getElementById('roomCount').value;
             ensureContinuityInRow(id, cell); // Enforce continuity
         }
     } else {
-        // Handling deselection
-        delete selectedDates[key]; // Immediately remove the selection before further checks
-        deselectContinuousBlockIfNeeded(cell, id); // Adjusted to include the deselected cell in its logic
+        delete selectedDates[key];
+        deselectContinuousBlockIfNeeded(cell, id);
     }
 
-    updateCellDisplay(); // Refresh display after all changes
+    updateCellDisplay(); // Ensure the display is refreshed
 }
+
 
 
 function deselectContinuousBlockIfNeeded(deselectedCell, rowId) {
@@ -313,8 +334,10 @@ function deselectCellsStartingFrom(cell) {
     var roomCount = parseInt(document.getElementById('roomCount').value, 10);
     var totalPilgrims = calculatePilgrims(roomType, roomCount);
 
-    // Adjust the room count for Shifting Makkah based on total pilgrims
-    adjustShiftingMakkahRoomCount(totalPilgrims);
+    // Proceed with Shifting Makkah room count adjustment and validation
+    if (!adjustShiftingMakkahRoomCount(totalPilgrims)) {
+        return; // Stop the calculation if there's an issue with Shifting Makkah room count
+    }
 
     // Proceed with summary generation and display update
     clearSummaryRows();
@@ -382,21 +405,33 @@ function checkRowContinuity(rowId) {
 }
 
 
-function adjustShiftingMakkahRoomCount(totalPilgrims) {
+function adjustShiftingMakkahRoomCount() {
+    // Calculate the total number of pilgrims from Main Makkah/Madinah rooms
+    var mainMakkahRoomCount = parseInt(document.getElementById('roomCount').value, 10);
+    var mainMakkahRoomType = document.getElementById('roomType').value;
+    var mainMakkahCapacity = { double: 2, triple: 3, quadruple: 4 }[mainMakkahRoomType];
+    var totalPilgrimsShiftingMakkah = mainMakkahRoomCount * mainMakkahCapacity;
+
+    // Get the selected room type for Shifting Makkah
     var shiftingMakkahRoomType = document.getElementById('shiftingMakkahRoomType').value;
     var shiftingCapacity = { double: 2, triple: 3, quadruple: 4 }[shiftingMakkahRoomType];
-    var shiftingMakkahRoomCount = Math.ceil(totalPilgrims / shiftingCapacity);
 
-    // Check if the room count aligns with the total number of pilgrims
-    if (shiftingMakkahRoomCount * shiftingCapacity < totalPilgrims) {
-        // If not, alert the user and make necessary adjustments
-        alert(`The selected room type for Shifting Makkah (${shiftingMakkahRoomType}) cannot accommodate all pilgrims without affecting the total number. Please adjust your selections.`);
-        // Here, you might want to automatically adjust the room type or count, or let the user decide
+    // Calculate how many rooms would be needed in Shifting Makkah for the total number of pilgrims
+    var shiftingMakkahRoomCountNeeded = totalPilgrimsShiftingMakkah / shiftingCapacity;
+
+    // If the calculated room count is not a whole number, alert the user to adjust their selection
+    if (!Number.isInteger(shiftingMakkahRoomCountNeeded)) {
+        alert("The selected room type for Shifting Makkah cannot accommodate all pilgrims equally without leaving someone without a bed. Please adjust your selections to ensure every pilgrim has a bed.");
+        return false; // Indicate that the room type selection is invalid
     } else {
-        // Update the Shifting Makkah room count to match the calculation
-        document.getElementById('shiftingMakkahRoomCount').value = shiftingMakkahRoomCount;
+        // If the calculation is valid (whole number), update the Shifting Makkah room count to reflect the number of rooms needed
+        document.getElementById('shiftingMakkahRoomCount').value = shiftingMakkahRoomCountNeeded;
+        return true; // Indicate success
     }
 }
+
+
+
     
     function clearSummaryRows() {
         var summaryTable = document.getElementById('summaryTable');
@@ -483,8 +518,12 @@ function displayGroupedData(groupedData) {
     });
 }
 
+roomSettings[rowId] = {
+    mainMakkah: { roomType: 'double', roomCount: 2 },
+    shiftingMakkah: { roomType: 'triple', roomCount: 1 },
+    madinah: { roomType: 'quadruple', roomCount: 1 }
+};
 
-    
     // Calculate Pilgrims (Placeholder function, implement logic as needed)
     function calculatePilgrims(roomType, roomCount) {
         const pilgrimMap = { double: 2, triple: 3, quadruple: 4 };
