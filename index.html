@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hotel Booking</title>
+<style>
+  table, th, td {
+    border: 1px solid black;
+    border-collapse: collapse;
+  }
+  th, td {
+    padding: 5px;
+    text-align: center;
+    cursor: pointer;
+  }
+  th {
+    background-color: #f2f2f2;
+    cursor: default;
+  }
+  .mainMakkah { background-color: #ffcccc; }
+  .shiftingMakkah { background-color: #ccccff; }
+  .madinah { background-color: #ccffcc; }
+</style>
+</head>
+<body>
+
+<select id="hotelLocation">
+  <option value="">Select Location</option>
+  <option value="mainMakkah">Main Makkah</option>
+  <option value="shiftingMakkah">Shifting Makkah</option>
+  <option value="madinah">Madinah</option>
+</select>
+<br>
+<button onclick="addRoomLine()">Add Room Line</button>
+<br><br>
+<table id="bookingTable"></table>
+<br>
+
+Room Type (Main Makkah/Madinah): 
+<select id="roomType">
+  <option value="double">Double</option>
+  <option value="triple">Triple</option>
+  <option value="quadruple">Quadruple</option>
+</select>
+
+Number of Rooms (Main Makkah/Madinah): 
+<input type="number" id="roomCount" value="0">
+<br>
+
+Room Type (Shifting Makkah): 
+<select id="shiftingMakkahRoomType">
+  <option value="double">Double</option>
+  <option value="triple">Triple</option>
+  <option value="quadruple">Quadruple</option>
+</select>
+
+Number of Rooms (Shifting Makkah): 
+<input type="number" id="shiftingMakkahRoomCount" value="0">
+<br><br>
+
+<button onclick="calculate()">Calculate</button>
+
+<h3>Summary:</h3>
+<table id="summaryTable">
+  <tr>
+    <th>ID</th>
+    <th>Area</th>
+    <th>From</th>
+    <th>To</th>
+    <th>Room</th>
+    <th>Room Type</th>
+    <th>Pilgrims</th>
+  </tr>
+</table>
+
+
+<script>
+var selectedDates = {}; // Structure: { 'rowID-date': 'location' }
+    var roomLineCounter = 0; // Initialization of roomLineCounter
+
+    window.onload = function() {
+        createInitialRoomLines(10);
+    };
+    
+    function createInitialRoomLines(numberOfLines) {
+        for (let i = 0; i < numberOfLines; i++) {
+            addRoomLine();
+        }
+    }
+    
+    function addRoomLine() {
+        var bookingTable = document.getElementById('bookingTable');
+        if (roomLineCounter === 0) { // Add header only once
+            var headerRow = bookingTable.insertRow();
+            headerRow.insertCell().textContent = "ID"; // ID Column
+            for (var day = 1; day <= 30; day++) {
+                headerRow.insertCell().textContent = day + "/6";
+            }
+        }
+    
+        roomLineCounter++;
+        var row = bookingTable.insertRow();
+        var idCell = row.insertCell();
+        idCell.textContent = roomLineCounter; // Display the ID of the room line
+        for (var day = 1; day <= 30; day++) {
+            var cell = row.insertCell();
+            cell.textContent = "-";
+            cell.setAttribute("data-date", `${day}/6`);
+            cell.setAttribute("data-id", roomLineCounter);
+            cell.onclick = function() { selectCell(this); };
+        }
+    }
+
+    // Function to update the display based on selected dates
+    function updateCellDisplay() {
+    var cells = document.querySelectorAll('#bookingTable td[data-date]');
+    cells.forEach(cell => {
+        var date = cell.getAttribute('data-date');
+        var id = cell.getAttribute('data-id');
+        var key = id + '-' + date;
+        
+        if (selectedDates[key]) {
+            // Example logic to determine what text to display
+            cell.textContent = selectedDates[key].charAt(0).toUpperCase();
+        } else {
+            cell.textContent = '-'; // Reset cells not selected to be visually empty
+        }
+    });
+}
+    
+function selectCell(cell) {
+    var date = cell.getAttribute('data-date');
+    var id = cell.getAttribute('data-id');
+    var location = document.getElementById('hotelLocation').value;
+    var roomCount = getRoomCountByLocation(location); // Assuming this function returns the room count
+
+    if (!location) {
+        alert('Please select a location first.');
+        return;
+    }
+
+    var key = `${id}-${date}`;
+    if (selectedDates[key]) {
+        // Deselect this cell and any subsequent selected cells in the row
+        deselectCellsStartingFrom(cell);
+    } else {
+        // Select this cell. If it's between two selected cells, also select all in-between cells
+        selectCellAndInRange(cell, roomCount, location);
+    }
+
+    updateCellDisplay(); // Reflect selection changes in UI
+}
+
+
+// Helper functions for the new logic
+function getRoomCountByLocation(location) {
+    // You can expand this logic based on your application's needs
+    switch(location) {
+        case "mainMakkah": return document.getElementById('roomCount').value;
+        case "shiftingMakkah": return document.getElementById('shiftingMakkahRoomCount').value;
+        // Add more cases as needed
+        default: return 0;
+    }
+}
+
+function deselectCellsStartingFrom(cell) {
+    // Additional logic to only deselect cells until another selection or the clicked cell itself
+    let currentRowCells = Array.from(cell.parentNode.querySelectorAll('td[data-date]'));
+    let cellIndex = currentRowCells.indexOf(cell);
+
+    for (let i = cellIndex; i < currentRowCells.length; i++) {
+        let cellKey = `${currentRowCells[i].getAttribute('data-id')}-${currentRowCells[i].getAttribute('data-date')}`;
+        if (selectedDates[cellKey]) {
+            delete selectedDates[cellKey];
+            currentRowCells[i].textContent = "-";
+            currentRowCells[i].style.backgroundColor = ""; // Remove background color
+        }
+    }
+}
+
+function selectCellAndInRange(cell, roomCount, location) {
+    let rowCells = Array.from(cell.parentNode.querySelectorAll('td[data-date]'));
+    let cellIndex = rowCells.indexOf(cell);
+    let startRange = cellIndex;
+    let endRange = cellIndex;
+
+    // Find the start and end range for selection based on existing selections in the row
+    for (let i = cellIndex - 1; i >= 0; i--) {
+        if (!rowCells[i].classList.contains(location) && rowCells[i].textContent !== "-") break;
+        startRange = i;
+    }
+
+    for (let i = cellIndex + 1; i < rowCells.length; i++) {
+        if (!rowCells[i].classList.contains(location) && rowCells[i].textContent !== "-") break;
+        endRange = i;
+    }
+
+    // Select cells within the range
+    for (let i = startRange; i <= endRange; i++) {
+        let key = `${rowCells[i].getAttribute('data-id')}-${rowCells[i].getAttribute('data-date')}`;
+        selectedDates[key] = location;
+        rowCells[i].textContent = roomCount; // Display the room count
+        colorCellBasedOnLocation(rowCells[i], location); // Color the cell based on location
+    }
+}
+
+function colorCellBasedOnLocation(cell, location) {
+    // Apply color coding based on location
+    switch(location) {
+        case "mainMakkah": cell.style.backgroundColor = "#ffcccc"; break;
+        case "shiftingMakkah": cell.style.backgroundColor = "#ccccff"; break;
+        case "madinah": cell.style.backgroundColor = "#ccffcc"; break;
+        default: cell.style.backgroundColor = ""; // No location selected
+    }
+}
+    
+    
+    // Function to calculate and generate the summary table
+    function calculate() {
+        clearSummaryRows();
+        generateSummary();
+    }
+    
+    function clearSummaryRows() {
+        var summaryTable = document.getElementById('summaryTable');
+        while (summaryTable.rows.length > 1) {
+            summaryTable.deleteRow(1);
+        }
+    }
+    
+    // Generate the summary based on selectedDates
+    function generateSummary() {
+    clearSummaryRows();
+    var groupedData = groupSelectedDatesByLineAndLocation();
+    displayGroupedData(groupedData);
+}
+
+function groupSelectedDatesByLineAndLocation() {
+    // Initialize an object to hold the grouped data
+    let groupedData = {};
+
+    // Iterate over each selected date
+    Object.entries(selectedDates).forEach(([key, location]) => {
+        const [id, date] = key.split('-');
+        const dateObj = new Date(date.split('/')[1] + '/' + date.split('/')[0] + '/2024'); // Convert date to Date object
+        
+        if (!groupedData[`${id}-${location}`]) {
+            groupedData[`${id}-${location}`] = [];
+        }
+
+        groupedData[`${id}-${location}`].push(dateObj);
+    });
+
+    // Sort dates within each group and find contiguous ranges
+    Object.keys(groupedData).forEach(group => {
+        groupedData[group].sort((a, b) => a - b);
+
+        // Reduce the sorted dates into contiguous ranges
+        const ranges = groupedData[group].reduce((acc, current, index, array) => {
+            if (index === 0) {
+                acc.push({ start: current, end: current });
+            } else {
+                let lastRange = acc[acc.length - 1];
+                let difference = (current - lastRange.end) / (1000 * 60 * 60 * 24);
+
+                if (difference === 1) {
+                    lastRange.end = current;
+                } else {
+                    acc.push({ start: current, end: current });
+                }
+            }
+            return acc;
+        }, []);
+
+        // Convert ranges back to 'DD/MM' format and update groupedData
+        groupedData[group] = ranges.map(range => ({
+            start: formatDate(range.start),
+            end: formatDate(range.end),
+            roomCount: document.getElementById('roomCount').value, // Assuming a global room count for simplicity
+            roomType: document.getElementById('roomType').value // Assuming a global room type for simplicity
+        }));
+    });
+
+    return groupedData;
+}
+
+
+function displayGroupedData(groupedData) {
+    var summaryTable = document.getElementById('summaryTable');
+    Object.entries(groupedData).forEach(([key, ranges]) => {
+        const [id, location] = key.split('-');
+
+        ranges.forEach(range => {
+            let row = summaryTable.insertRow();
+            row.insertCell(0).textContent = id; // Room-line ID
+            row.insertCell(1).textContent = location; // Area
+            row.insertCell(2).textContent = range.start; // From date
+            row.insertCell(3).textContent = range.end; // To date
+            row.insertCell(4).textContent = range.roomCount; // Room count
+            row.insertCell(5).textContent = range.roomType; // Room type
+            row.insertCell(6).textContent = calculatePilgrims(range.roomType, range.roomCount); // Pilgrims
+        });
+    });
+}
+
+
+    
+    // Calculate Pilgrims (Placeholder function, implement logic as needed)
+    function calculatePilgrims(roomType, roomCount) {
+        const pilgrimMap = { double: 2, triple: 3, quadruple: 4 };
+        return pilgrimMap[roomType] * roomCount;
+    }
+    
+    // Format date (Placeholder function, format date as needed)
+    function formatDate(date) {
+    return `${('0' + date.getDate()).slice(-2)}/${('0' + (date.getMonth() + 1)).slice(-2)}`;
+}
+    </script>
+    
+    
+    
+
+</body>
+</html>
