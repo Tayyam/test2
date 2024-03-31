@@ -313,6 +313,9 @@ function deselectCellsStartingFrom(cell) {
     var roomCount = parseInt(document.getElementById('roomCount').value, 10);
     var totalPilgrims = calculatePilgrims(roomType, roomCount);
 
+    // Adjust the room count for Shifting Makkah based on total pilgrims
+    adjustShiftingMakkahRoomCount(totalPilgrims);
+
     // Proceed with summary generation and display update
     clearSummaryRows();
     var groupedData = groupSelectedDatesByLineAndLocation();
@@ -380,21 +383,18 @@ function checkRowContinuity(rowId) {
 
 
 function adjustShiftingMakkahRoomCount(totalPilgrims) {
-    // Initially selected room type for Shifting Makkah
-    var shiftingMakkahRoomTypeSelected = document.getElementById('shiftingMakkahRoomType').value;
-    var shiftingCapacity = { double: 2, triple: 3, quadruple: 4 }[shiftingMakkahRoomTypeSelected];
-    var shiftingMakkahRoomCount = totalPilgrims / shiftingCapacity;
+    var shiftingMakkahRoomType = document.getElementById('shiftingMakkahRoomType').value;
+    var shiftingCapacity = { double: 2, triple: 3, quadruple: 4 }[shiftingMakkahRoomType];
+    var shiftingMakkahRoomCount = Math.ceil(totalPilgrims / shiftingCapacity);
 
-    // Ensure the calculated room count for Shifting Makkah matches the total pilgrim count exactly
-    if (Math.ceil(shiftingMakkahRoomCount) * shiftingCapacity !== totalPilgrims) {
-        // Alert and revert if not matching
-        alert(`Shifting Makkah room type ${shiftingMakkahRoomTypeSelected} cannot accommodate all pilgrims equally without affecting the total number of pilgrims. Reverting to ${roomType}.`);
-        document.getElementById('shiftingMakkahRoomType').value = roomType; // Revert Shifting Makkah room type to Main Makkah/Madinah room type
-        shiftingMakkahRoomTypeSelected = roomType; // Update the variable for subsequent logic
-        shiftingCapacity = { double: 2, triple: 3, quadruple: 4 }[roomType]; // Update the capacity to match the reverted room type
-        shiftingMakkahRoomCount = Math.ceil(totalPilgrims / shiftingCapacity); // Recalculate room count with reverted room type
+    // Check if the room count aligns with the total number of pilgrims
+    if (shiftingMakkahRoomCount * shiftingCapacity < totalPilgrims) {
+        // If not, alert the user and make necessary adjustments
+        alert(`The selected room type for Shifting Makkah (${shiftingMakkahRoomType}) cannot accommodate all pilgrims without affecting the total number. Please adjust your selections.`);
+        // Here, you might want to automatically adjust the room type or count, or let the user decide
     } else {
-        document.getElementById('shiftingMakkahRoomCount').value = Math.ceil(shiftingMakkahRoomCount); // Update the input field if calculation is valid
+        // Update the Shifting Makkah room count to match the calculation
+        document.getElementById('shiftingMakkahRoomCount').value = shiftingMakkahRoomCount;
     }
 }
     
